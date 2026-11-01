@@ -3,23 +3,15 @@ from pandas import DataFrame
 lazy import numpy as np
 
 def decode(index_0_8: int):  ###decoding the 0-8-square indexing
-    x = 3 * index_0_8 // 3
-    index_0_8 -= (index_0_8 // 3) * 3
-    return x, index_0_8  ###returns the coordinations of the first cell of the square
-
-
-def decode_cell_from_square(first_x_coord: int,
-                             index_in_full_list: int):  ####0-8 indexing when full list (len()=9) from get_square
-    y_index = index_in_full_list - (index_in_full_list // 3) * 3
-    x_index = first_x_coord + index_in_full_list // 3
-    return x_index, y_index
-
+    x = 3 * (index_0_8 // 3)
+    y = (index_0_8 - (3*(index_0_8//3))) * 3
+    return x, y  ###returns the coordinations of the first cell of the square
 
 
 
 class Sudoku:
-    def __init__(self, sudoku_archieve:str):
-        a = pd.read_csv(filepath_or_buffer=sudoku_archieve, header=None, keep_default_na=False, dtype="Int64")
+    def __init__(self, sudoku_archive:str):
+        a = pd.read_csv(filepath_or_buffer=sudoku_archive, header=None, keep_default_na=False, dtype="Int64")
         a = a.replace({np.nan: None})
 
         a = DataFrame(a)
@@ -56,21 +48,15 @@ class Sudoku:
     def get_row(self, line_index:int, get_none=False) -> list: #0-8
         row_list = self.sudoku.iloc[line_index].tolist()
         if not get_none:
-            while True:
-
-                if None not in row_list:
-                    break
-                row_list.remove(None)
+            new_row_list = [i for i in row_list if i is not None]
+            return new_row_list
         return row_list
 
     def get_column(self, column_index:int, get_none=False) -> list: #0-8
         column_list = self.sudoku.iloc[:, column_index].tolist()
         if not get_none:
-            while True:
-
-                if None not in column_list:
-                    break
-                column_list.remove(None)
+            new_column_list = [i for i in column_list if i is not None]
+            return new_column_list
         return column_list
 
 
@@ -100,7 +86,12 @@ class Solver:
         z = 3*(x//3) + y // 3
         self.square[z] += 1
 
-
+    def decode_cell_from_square(self, index_of_square: int): #returns the coordinates where None cell exists on the dataframe
+        x_initial, y_initial = decode(index_of_square)
+        index_of_full_list = self.sudoku.get_square(x_initial, y_initial, get_none=True).index(None)
+        x = x_initial + (index_of_full_list // 3)
+        y = index_of_full_list - (3 * (index_of_full_list // 3)) + y_initial
+        return x, y
 
     def quick_checker(self): #checks if any line, column, square exists with one value missing, making easy the search for other missing values to be found
         if len(set(self.square)) == 1:
@@ -111,7 +102,7 @@ class Solver:
             return f"c{self.columns.index(8)}"
         if 8 in self.square:
             return f"s{self.square.index(8)}"
-        return -1
+        return -1 #quick solver can't solve the puzzle
 
 
 
@@ -124,60 +115,54 @@ class Solver:
                 if i not in l1:
                     solution = i
                     break
-            x = index
-            y = l2.index(None)
-            self.sudoku[x, y] = solution
-            return x, y
+            i = index
+            other_i = l2.index(None)
+            return i, other_i, solution
 
 
         if typ == "l":
-            x, y = straight_replacement(self.sudoku.get_row(index), self.sudoku.get_row(index, get_none=True))
+            x, y, solution = straight_replacement(self.sudoku.get_row(index), self.sudoku.get_row(index, get_none=True))
+            self.sudoku[x, y] = solution
             self.upgrade_grades(x,y)
 
         elif typ == "c":
-            x,y = straight_replacement(self.sudoku.get_column(index), self.sudoku.get_column(index, get_none=True))
+            y,x,solution = straight_replacement(self.sudoku.get_column(index), self.sudoku.get_column(index, get_none=True))
+            self.sudoku[x, y] = solution
             self.upgrade_grades(x,y)
 
         else:
-            x,y = decode(index)
-            l_index = self.sudoku.get_square(x, y, get_none=True).index(None) #index of give_square list
-            x_index, y_index = decode_cell_from_square(x, l_index)
+            x_initial, y_initial = decode(index) #coord of the first element of the square
+            x_index, y_index = self.decode_cell_from_square(index)
             solution = -1
             for i in range(1,10):
-                if i not in self.sudoku.get_square(x,y):
+                if i not in self.sudoku.get_square(x_initial,y_initial):
                     solution = i
                     break
             self.sudoku[x_index, y_index] = solution
+            self.upgrade_grades(x_index, y_index)
 
     def cls_check(self): ###checks taking into consideration columns, lines, square
-        stabilizer = 1
 
-        z = self.square.copy()
-        while len(z) != 0:
-            for i in z:
-                if i > stabilizer and i < 9:
-                    stabilizer = i
-            max_square = stabilizer
-            try:
-                z.remove(max_square)
-            except ValueError:
-                pass
+        exact_copy = self.square.copy()
+        z = [i for i in sorted(self.square.copy(), reverse=True) if i != 9]
+        for max_square in z:
 
-            x, y = decode(self.square.index(max_square))
-            full_square_list = self.sudoku.get_square(x, y, get_none=True)
+            x, y = decode(exact_copy.index(max_square))
             value_square_list = self.sudoku.get_square(x,y)
-            for i in full_square_list:
-                if i is None:
-                    x_index, y_index = decode_cell_from_square(x, full_square_list.index(i))
-                    current_column = self.sudoku.get_column(y_index)
-                    current_line = self.sudoku.get_row(x_index)
-                    if len(set(current_column+current_line+value_square_list)) == 8:
-                        solution = -1
-                        for i in range(1,10):
-                            solution = i
-                            break
-                        self.sudoku[x_index, y_index] = solution
-                        return 1
-                    else:
-                        continue
-        return 0 #for program control
+            x_index, y_index = self.decode_cell_from_square(exact_copy.index(max_square))
+            exact_copy[exact_copy.index(max_square)] = -1
+            current_column = self.sudoku.get_column(y_index)
+            current_line = self.sudoku.get_row(x_index)
+            super_set = set(current_column+current_line+value_square_list)
+            if len(super_set) == 8:
+                solution = -1
+                for i in range(1,10):
+                    if i not in super_set:
+                        solution = i
+                        break
+                self.sudoku[x_index, y_index] = solution
+                self.upgrade_grades(x_index, y_index)
+                return 1 #found a solution
+            else:
+                continue
+        return 0 #can't do anything else

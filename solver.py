@@ -1,18 +1,20 @@
 from obj import *
 
-c = Sudoku("very_simple_sudoku.csv") #enters the csv document
-b = Solver(c)
+sudoku_format = Sudoku("sample.csv") #enters the csv document
+solving = Solver(sudoku_format)
 
 
 while True:
-
-    x = b.quick_checker()
+    x = solving.quick_checker()
     if x == -2:
         print("Sudoku Solved!")
-        c.print_board()
+        sudoku_format.print_board()
         break
     if x == -1:
-        b.cls_check()
+        ch = solving.cls_check() #if 0 we use other algorhythms
+        if ch == 0:
+            print("There is nothing else we can do") #in newer version it will use other algorhythms to solve more difficult puzzles
+            break
     else:
-        x = list(x)
-        b.quick_solver(x[0], int(x[1]))
+       x = list(x)
+       solving.quick_solver(x[0], int(x[1]))
